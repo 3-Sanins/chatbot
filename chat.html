@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Reality Bot</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+:root{
+  --bg:#020617;
+  --panel:#0f172a;
+  --bot:#1e293b;
+  --user:#2563eb;
+  --text:#e5e7eb;
+}
+*{box-sizing:border-box;font-family:system-ui,Segoe UI}
+body{
+  margin:0;
+  height:100vh;
+  background:linear-gradient(135deg,#020617,#0f172a);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.app{
+  width:100%;
+  max-width:420px;
+  height:92vh;
+  background:var(--panel);
+  border-radius:18px;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  box-shadow:0 20px 50px rgba(0,0,0,.6);
+}
+.header{
+  padding:14px 16px;
+  background:#020617;
+  color:white;
+  font-weight:600;
+}
+.messages{
+  flex:1;
+  padding:14px;
+  overflow-y:auto;
+}
+.msg{
+  max-width:80%;
+  padding:10px 14px;
+  border-radius:14px;
+  margin-bottom:10px;
+  font-size:14px;
+  line-height:1.4;
+  word-wrap:break-word;
+}
+.user{
+  background:var(--user);
+  color:white;
+  margin-left:auto;
+  border-bottom-right-radius:4px;
+}
+.bot{
+  background:var(--bot);
+  color:var(--text);
+  border-bottom-left-radius:4px;
+}
+.footer{
+  display:flex;
+  gap:8px;
+  padding:10px;
+  background:#020617;
+}
+input{
+  flex:1;
+  padding:10px 12px;
+  border-radius:10px;
+  border:none;
+  outline:none;
+  background:#020617;
+  color:white;
+}
+button{
+  padding:0 16px;
+  border:none;
+  border-radius:10px;
+  background:#2563eb;
+  color:white;
+  cursor:pointer;
+}
+button:disabled{
+  opacity:.6;
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+  <div class="header" id="chatTitle">Reality Bot</div>
+  <div class="messages" id="messages"></div>
+
+  <div class="footer">
+    <input id="input" placeholder="Type here..." autocomplete="off" />
+    <button id="send">Send</button>
+  </div>
+</div>
+
+<script>
+/* ================= CONFIG ================= */
+
+const WORKER_URL = "https://chatbot.sanins121421.workers.dev";
+
+/* ================= CHAT DETECTION ================= */
+
+const params = new URLSearchParams(location.search);
+const chatName = params.get("chat");
+
+if(!chatName){
+  alert("Chat not found");
+  throw new Error("No chat param");
+}
+
+document.getElementById("chatTitle").textContent = chatName;
+
+/* ================= STORAGE ================= */
+
+const chats = JSON.parse(localStorage.getItem("chats") || "{}");
+
+if(!chats[chatName]){
+  chats[chatName] = {
+    messages: [],
+    createdAt: Date.now()
+  };
+  localStorage.setItem("chats", JSON.stringify(chats));
+}
+
+let chatHistory = chats[chatName].messages;
+
+/* ================= UI ================= */
+
+const messagesDiv = document.getElementById("messages");
+const input = document.getElementById("input");
+const sendBtn = document.getElementById("send");
+
+function saveChats(){
+  chats[chatName].messages = chatHistory;
+  localStorage.setItem("chats", JSON.stringify(chats));
+}
+
+function renderMessages(){
+  messagesDiv.innerHTML = "";
+  chatHistory.forEach(m=>{
+    const div = document.createElement("div");
+    div.className = "msg " + (m.role === "user" ? "user" : "bot");
+    div.textContent = m.content;
+    messagesDiv.appendChild(div);
+  });
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+renderMessages();
+input.focus();
+
+/* ================= BOT CALL ================= */
+
+async function sendMessageToBot(userText){
+  sendBtn.disabled = true;
+
+  chatHistory.push({ role:"user", content:userText });
+  saveChats();
+  renderMessages();
+
+  try{
+    const res = await fetch(WORKER_URL,{
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ messages: chatHistory })
+    });
+
+    const data = await res.json();
+
+    const botReply =
+      data?.outputs?.[0]?.content ||
+      data?.messages?.slice(-1)[0]?.content ||
+      "No response from bot";
+
+    chatHistory.push({ role:"assistant", content:botReply });
+    saveChats();
+    renderMessages();
+
+  }catch(e){
+    chatHistory.push({
+      role:"assistant",
+      content:"⚠️ Connection error"
+    });
+    saveChats();
+    renderMessages();
+  }
+
+  sendBtn.disabled = false;
+  input.focus();
+}
+
+/* ================= EVENTS ================= */
+
+sendBtn.onclick = ()=>{
+  const text = input.value.trim();
+  if(!text) return;
+  input.value = "";
+  sendMessageToBot(text);
+};
+
+input.addEventListener("keydown",e=>{
+  if(e.key === "Enter") sendBtn.click();
+});
+</script>
+</body>
+</html>
