@@ -2,216 +2,170 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Reality Bot</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+<title>Chats</title>
 <style>
-:root{
-  --bg:#020617;
-  --panel:#0f172a;
-  --bot:#1e293b;
-  --user:#2563eb;
-  --text:#e5e7eb;
+* { box-sizing: border-box; font-family: system-ui, Arial; }
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #0f1220;
+  color: white;
 }
-*{box-sizing:border-box;font-family:system-ui,Segoe UI}
-body{
-  margin:0;
-  height:100vh;
-  background:linear-gradient(135deg,#020617,#0f172a);
-  display:flex;
-  align-items:center;
-  justify-content:center;
+
+/* Sidebar */
+#sidebar {
+  width: 260px;
+  height: 80vh;
+  background: #151935;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
 }
-.app{
-  width:100%;
-  max-width:420px;
-  height:92vh;
-  background:var(--panel);
-  border-radius:18px;
-  display:flex;
-  flex-direction:column;
-  overflow:hidden;
-  box-shadow:0 20px 50px rgba(0,0,0,.6);
+
+
+#chatList {
+  flex: 1;
+  overflow-y: auto;
 }
-.header{
-  padding:14px 16px;
-  background:#020617;
-  color:white;
-  font-weight:600;
+
+.chat-btn {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 6px;
+  background: #1f2455;
+  border: none;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
 }
-.messages{
-  flex:1;
-  padding:14px;
-  overflow-y:auto;
+.chat-btn:hover {
+  background: #2a30ff;
 }
-.msg{
-  max-width:80%;
-  padding:10px 14px;
-  border-radius:14px;
-  margin-bottom:10px;
-  font-size:14px;
-  line-height:1.4;
-  word-wrap:break-word;
+
+#createBtn {
+  padding: 12px;
+  border: none;
+  border-radius: 6px;
+  background: #2a30ff;
+  color: white;
+  cursor: pointer;
 }
-.user{
-  background:var(--user);
-  color:white;
-  margin-left:auto;
-  border-bottom-right-radius:4px;
+
+/* Popup */
+#popup {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
 }
-.bot{
-  background:var(--bot);
-  color:var(--text);
-  border-bottom-left-radius:4px;
+
+#popupBox {
+  background: #151935;
+  padding: 20px;
+  border-radius: 8px;
+  width: 280px;
 }
-.footer{
-  display:flex;
-  gap:8px;
-  padding:10px;
-  background:#020617;
+
+#popupBox input {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
 }
-input{
-  flex:1;
-  padding:10px 12px;
-  border-radius:10px;
-  border:none;
-  outline:none;
-  background:#020617;
-  color:white;
+
+#popupBox button {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  background: #2a30ff;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
 }
-button{
-  padding:0 16px;
-  border:none;
-  border-radius:10px;
-  background:#2563eb;
-  color:white;
-  cursor:pointer;
+
+@media (max-width: 600px) {
+  #sidebar {
+    width: 95vw;
+    height: 90vh;
+  }
 }
-button:disabled{
-  opacity:.6;
-}
+
 </style>
 </head>
-
 <body>
-<div class="app">
-  <div class="header" id="chatTitle">Reality Bot</div>
-  <div class="messages" id="messages"></div>
 
-  <div class="footer">
-    <input id="input" placeholder="Type here..." autocomplete="off" />
-    <button id="send">Send</button>
+<div id="sidebar">
+  <div id="chatList"></div>
+  <button id="createBtn">+ Create Chat</button>
+</div>
+
+<div id="popup">
+  <div id="popupBox">
+    <h3>Create Chat</h3>
+    <input id="chatNameInput" placeholder="Chat name">
+    <button id="createChatConfirm">Create</button>
   </div>
 </div>
 
 <script>
-/* ================= CONFIG ================= */
-
-const WORKER_URL = "https://chatbot.sanins121421.workers.dev";
-
-/* ================= CHAT DETECTION ================= */
-
-const params = new URLSearchParams(location.search);
-const chatName = params.get("chat");
-
-if(!chatName){
-  alert("Chat not found");
-  throw new Error("No chat param");
-}
-
-document.getElementById("chatTitle").textContent = chatName;
-
-/* ================= STORAGE ================= */
-
-const chats = JSON.parse(localStorage.getItem("chats") || "{}");
-
-if(!chats[chatName]){
-  chats[chatName] = {
-    messages: [],
-    createdAt: Date.now()
-  };
+/* ---------- STORAGE INIT ---------- */
+let chats = JSON.parse(localStorage.getItem("chats"));
+if (!chats) {
+  chats = {};
   localStorage.setItem("chats", JSON.stringify(chats));
 }
 
-let chatHistory = chats[chatName].messages;
+/* ---------- RENDER CHAT LIST ---------- */
+function renderChats() {
+  const chatList = document.getElementById("chatList");
+  chatList.innerHTML = "";
 
-/* ================= UI ================= */
-
-const messagesDiv = document.getElementById("messages");
-const input = document.getElementById("input");
-const sendBtn = document.getElementById("send");
-
-function saveChats(){
-  chats[chatName].messages = chatHistory;
-  localStorage.setItem("chats", JSON.stringify(chats));
-}
-
-function renderMessages(){
-  messagesDiv.innerHTML = "";
-  chatHistory.forEach(m=>{
-    const div = document.createElement("div");
-    div.className = "msg " + (m.role === "user" ? "user" : "bot");
-    div.textContent = m.content;
-    messagesDiv.appendChild(div);
+  Object.keys(chats).forEach(chatName => {
+    const btn = document.createElement("button");
+    btn.className = "chat-btn";
+    btn.textContent = chatName;
+    btn.onclick = () => {
+      window.location.href = `chat.html?chat=${encodeURIComponent(chatName)}`;
+    };
+    chatList.appendChild(btn);
   });
-  messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
-renderMessages();
-input.focus();
+renderChats();
 
-/* ================= BOT CALL ================= */
-
-async function sendMessageToBot(userText){
-  sendBtn.disabled = true;
-
-  chatHistory.push({ role:"user", content:userText });
-  saveChats();
-  renderMessages();
-
-  try{
-    const res = await fetch(WORKER_URL,{
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ messages: chatHistory })
-    });
-
-    const data = await res.json();
-
-    const botReply =
-      data?.outputs?.[0]?.content ||
-      data?.messages?.slice(-1)[0]?.content ||
-      "No response from bot";
-
-    chatHistory.push({ role:"assistant", content:botReply });
-    saveChats();
-    renderMessages();
-
-  }catch(e){
-    chatHistory.push({
-      role:"assistant",
-      content:"⚠️ Connection error"
-    });
-    saveChats();
-    renderMessages();
-  }
-
-  sendBtn.disabled = false;
-  input.focus();
-}
-
-/* ================= EVENTS ================= */
-
-sendBtn.onclick = ()=>{
-  const text = input.value.trim();
-  if(!text) return;
-  input.value = "";
-  sendMessageToBot(text);
+/* ---------- POPUP LOGIC ---------- */
+const popup = document.getElementById("popup");
+document.getElementById("createBtn").onclick = () => {
+  popup.style.display = "flex";
 };
 
-input.addEventListener("keydown",e=>{
-  if(e.key === "Enter") sendBtn.click();
-});
+popup.onclick = e => {
+  if (e.target === popup) popup.style.display = "none";
+};
+
+/* ---------- CREATE CHAT ---------- */
+document.getElementById("createChatConfirm").onclick = () => {
+  const name = document.getElementById("chatNameInput").value.trim();
+  if (!name) return;
+
+  if (!chats[name]) {
+    chats[name] = {
+      messages: [],
+      createdAt: Date.now()
+    };
+    localStorage.setItem("chats", JSON.stringify(chats));
+  }
+
+  window.location.href = `chat.html?chat=${encodeURIComponent(name)}`;
+};
 </script>
+
 </body>
 </html>
